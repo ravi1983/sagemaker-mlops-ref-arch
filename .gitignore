@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+.terraform
+.terraform*
+.terraform.lock.hcl
+terraform.tfvars
+terraform.tfstate
+terraform.tfstate*
+
+.idea
+*.iml
+
+.tmp_dagster_home*
+.dg
+/data/.ipynb_checkpoints/
+
+
+set_env.sh
