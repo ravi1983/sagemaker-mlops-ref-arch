@@ -9,4 +9,5 @@ docker run -it \
   -v "/home/ravi/projects/public_repo/sagemaker-mlops-ref-arch/emr/data:/home/hadoop/test_data" \
   public.ecr.aws/emr-serverless/spark/emr-7.6.0:latest
 
-#aws configure export-credentials --format env
+# aws configure export-credentials --format env
+# rm -rf ~/.aws/sso/cache ~/.aws/cli/cache

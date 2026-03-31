@@ -6,11 +6,16 @@ from dagster_aws.pipes import PipesEMRServerlessClient
 
 
 @dg.asset
-def training_data() -> str:
-    return os.environ['RAW_ASSET']
+def training_data() -> dg.Output[str]:
+    return dg.Output(
+        value=os.environ['RAW_ASSET'],
+        metadata={
+            'raw_data': os.environ['RAW_ASSET']
+        }
+    )
 
 
-@dg.asset(deps=[training_data])
+@dg.asset
 def feature_engineer_data(context: dg.AssetExecutionContext,
                           pipes_emr_serverless_client: PipesEMRServerlessClient,
                           training_data: str):
