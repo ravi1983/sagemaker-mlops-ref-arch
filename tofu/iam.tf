@@ -63,24 +63,6 @@ resource "aws_iam_role" "sm-exec-role" {
   })
 }
 
-resource "aws_iam_role" "sagemaker-feature-store-role" {
-  name = "sagemaker-feature-store-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = { Service = "sagemaker.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "sagemaker-full-access" {
-  role       = aws_iam_role.sagemaker-feature-store-role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
-}
-
 resource "aws_iam_role_policy" "sm-exec-access" {
   name = "sm-exec-profile-access"
   role = aws_iam_role.sm-exec-role.id
@@ -128,8 +110,81 @@ resource "aws_iam_role_policy" "sm-exec-access" {
         ]
         Resource = aws_sagemaker_feature_group.offline_store.arn
       },
+      {
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups",
+          "logs:GetLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = ["arn:aws:logs:*:*:*"]
+      },
+      {
+        Action = [
+          # AWS does not provide built in MLFlow policy. For now, granting full access.
+          "sagemaker-mlflow:*"
+        ]
+        Effect   = "Allow"
+        Resource = aws_sagemaker_mlflow_tracking_server.ds-tracking-server.arn
+      },
+      {
+        Action = [
+          "sagemaker:CreateMlflowTrackingServer",
+          "sagemaker:ListMlflowTrackingServers",
+          "sagemaker:UpdateMlflowTrackingServer",
+          "sagemaker:DeleteMlflowTrackingServer",
+          "sagemaker:StartMlflowTrackingServer",
+          "sagemaker:StopMlflowTrackingServer",
+          "sagemaker:CreatePresignedMlflowTrackingServerUrl"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          aws_s3_bucket.training-data-23421.arn,
+          "${aws_s3_bucket.training-data-23421.arn}/*",
+          aws_s3_bucket.mlflow-artifacts-98761.arn,
+          "${aws_s3_bucket.mlflow-artifacts-98761.arn}/*"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+        ]
+        Resource = "*"
+      }
     ]
   })
+}
+
+resource "aws_iam_role" "sagemaker-feature-store-role" {
+  name = "sagemaker-feature-store-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "sagemaker.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker-full-access" {
+  role       = aws_iam_role.sagemaker-feature-store-role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
 }
 
 resource "aws_iam_role_policy" "feature-store-s3-access" {
@@ -150,7 +205,9 @@ resource "aws_iam_role_policy" "feature-store-s3-access" {
         ]
         Resource = [
           aws_s3_bucket.feature-store-786q23.arn,
-          "${aws_s3_bucket.feature-store-786q23.arn}/*"
+          "${aws_s3_bucket.feature-store-786q23.arn}/*",
+          aws_s3_bucket.training-data-23421.arn,
+          "${aws_s3_bucket.training-data-23421.arn}/*"
         ]
       }
     ]

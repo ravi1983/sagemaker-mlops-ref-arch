@@ -119,14 +119,13 @@ resource "aws_sagemaker_feature_group" "offline_store" {
   }
 }
 
-# resource "aws_sagemaker_mlflow_tracking_server" "ds-tracking-server" {
-#   tracking_server_name = "ds-tracking-server"
-#   role_arn = aws_iam_role.sm-exec-role.arn
-#   artifact_store_uri = "s3://${aws_s3_bucket.mlflow-artifacts-98761.bucket}/mlflow"
-#   tracking_server_size = "Small"
-#   mlflow_version = "3.0"
-# }
-
+resource "aws_sagemaker_mlflow_tracking_server" "ds-tracking-server" {
+  tracking_server_name = "ds-tracking-server"
+  role_arn = aws_iam_role.sm-exec-role.arn
+  artifact_store_uri = "s3://${aws_s3_bucket.mlflow-artifacts-98761.bucket}/mlflow"
+  tracking_server_size = "Small"
+  mlflow_version = "3.0"
+}
 
 output "sagemaker_feature_group_arn" {
   value = aws_sagemaker_feature_group.offline_store.arn
@@ -138,12 +137,12 @@ output "emr_application_id" {
   description = "Application ID of EMR serverless"
 }
 
-# output "mlflow_tracking_server_arn" {
-#   value = aws_sagemaker_mlflow_tracking_server.ds-tracking-server.arn
-#   description = "The ARN of the MLflow Tracking Server"
-# }
-#
-# output "mlflow_tracking_server_url" {
-#   value = aws_sagemaker_mlflow_tracking_server.ds-tracking-server.tracking_server_url
-#   description = "The DNS endpoint for the MLflow Tracking Server"
-# }
+output "mlflow_tracking_server_arn" {
+  value = aws_sagemaker_mlflow_tracking_server.ds-tracking-server.arn
+  description = "The ARN of the MLflow Tracking Server"
+}
+
+output "mlflow_tracking_server_url" {
+  value = aws_sagemaker_mlflow_tracking_server.ds-tracking-server.tracking_server_url
+  description = "The DNS endpoint for the MLflow Tracking Server"
+}

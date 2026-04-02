@@ -43,7 +43,6 @@ def load_training_data_to_s3(context: dg.AssetExecutionContext) -> dg.Output[str
         TO '{train_data_loc}'
         WITH (format='PARQUET')
     """
-    print(query)
 
     response = athena.start_query_execution(
         QueryString=query,
@@ -89,7 +88,8 @@ def create_training_job(load_training_data_to_s3: str):
         base_job_name="sklearn-classification",
         source_code=SourceCode(
             source_dir='/home/ravi/projects/public_repo/sagemaker-mlops-ref-arch/emr/src/train',
-            entry_script='train.py'
+            entry_script='train.py',
+            requirements='requirements.txt'
         ),
         compute=Compute(
             instance_type="ml.m5.xlarge",
