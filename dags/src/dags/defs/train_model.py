@@ -1,11 +1,15 @@
+import json
 import os
 import time
 
 import boto3
 import dagster as dg
+import mlflow
+from mlflow import MlflowClient
 from sagemaker.core import image_uris
+from sagemaker.core.helper.session_helper import Session
 
-from sagemaker.core.shapes import S3DataSource
+from sagemaker.core.shapes import S3DataSource, OutputDataConfig
 from sagemaker.core.training.configs import SourceCode, Compute, InputData
 from sagemaker.train.model_trainer import ModelTrainer
 
@@ -77,15 +81,17 @@ def load_training_data_to_s3(context: dg.AssetExecutionContext) -> dg.Output[str
     )
 
 
-@dg.asset(
-    key_prefix=["sagemaker"],
-    compute_kind="sagemaker"
-)
-def create_training_job(load_training_data_to_s3: str):
+@dg.asset(key_prefix=["sagemaker"], compute_kind="sagemaker")
+def create_training_job(load_training_data_to_s3: str) -> dg.Output[str]:
+    sm_bucket = 'mlflow-artifacts-98761'
+    sagemaker_session = Session(default_bucket=sm_bucket)
+
+    # Kick off training job and wait
     trainer = ModelTrainer(
-        training_image=image_uris.retrieve(framework='sklearn', region='us-east-2', version='1.2-1'),
-        role=os.environ['SAGEMAKER_ROLE_ARN'],
+        training_image=image_uris.retrieve(framework='sklearn', region='us-east-2', version='1.4-2'),
+        role=f"arn:aws:iam::{os.environ['ACCOUNT_NUM']}:role/sm-exec-role",
         base_job_name="sklearn-classification",
+        sagemaker_session=sagemaker_session,
         source_code=SourceCode(
             source_dir='/home/ravi/projects/public_repo/sagemaker-mlops-ref-arch/emr/src/train',
             entry_script='train.py',
@@ -94,10 +100,16 @@ def create_training_job(load_training_data_to_s3: str):
         compute=Compute(
             instance_type="ml.m5.xlarge",
             instance_count=1
-        )
+        ),
+        output_data_config=OutputDataConfig(
+            s3_output_path=f"s3://{sm_bucket}/sklearn-classification"
+        ),
+        environment={
+            'MLFLOW_TRACKING_URI': os.environ['MLFLOW_TRACKING_ARN'],
+            'S3_HANDSHAKE_LOC': f's3://{sm_bucket}/dagster'
+        }
     )
-
-    return trainer.train(
+    trainer.train(
         input_data_config=[
             InputData(
                 channel_name="training",
@@ -105,3 +117,49 @@ def create_training_job(load_training_data_to_s3: str):
             )
         ]
     )
+
+    # Read training result and materialize
+    s3_client = boto3.client('s3')
+    response = s3_client.get_object(Bucket=sm_bucket, Key='dagster/dagster_data.json')
+    dagster_data = json.loads(response['Body'].read().decode('utf-8'))
+
+    return dg.Output(
+        value=dagster_data['run_id'],
+        metadata={
+            'MLFlow Run ID': dg.MetadataValue.text(dagster_data['run_id']),
+            'MLFlow Artifact Path': dg.MetadataValue.text(dagster_data['artifact_uri']),
+            'SageMaker S3 Path': dg.MetadataValue.text(
+                f's3://{sm_bucket}/sklearn-classification/{dagster_data['sm_job_name']}'
+            ),
+        }
+    )
+
+@dg.asset
+def check_and_register_model(create_training_job: str) -> dg.Output[str]:
+    # Get run information from mlflow
+    mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_ARN"])
+    client = MlflowClient()
+    run_info = client.get_run(create_training_job)
+
+    # If accuracy is > 0.75 register the model and materialize it
+    if run_info.data.metrics['accuracy'] > 0.75:
+        model_uri = f"runs:/{create_training_job}/model"
+        registered_model = mlflow.register_model(
+            model_uri=model_uri,
+            name="CustomerClassificationModel",
+            tags={
+                'run_id': create_training_job,
+                'experiment': 'sk-classification'
+            }
+        )
+
+        return dg.Output(
+            value=registered_model.name,
+            metadata={
+                "Registered Model Name": registered_model.name,
+                "Registered Model Version": registered_model.version,
+            }
+        )
+
+    print("Model accuracy too low. Skipping registration.")
+    return None

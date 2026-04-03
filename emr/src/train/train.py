@@ -1,6 +1,8 @@
 import json
 import os
+from urllib.parse import urlparse
 
+import boto3
 import joblib
 import mlflow
 import pandas as pd
@@ -9,14 +11,37 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 
+
+def _write_dagster_data():
+    dagster_data = {
+        'run_name': run.info.run_name,
+        'run_id': run.info.run_id,
+        'experiment_name': 'sk-classification',
+        'artifact_uri': run.info.artifact_uri,
+        'sm_job_name': os.environ['TRAINING_JOB_NAME']
+    }
+
+    parsed_s3 = urlparse(os.environ.get('S3_HANDSHAKE_LOC'))
+    bucket_name = parsed_s3.netloc
+    directory_key = parsed_s3.path.lstrip('/')
+    object_key = os.path.join(directory_key, 'dagster_data.json')
+
+    s3_client = boto3.client('s3')
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=object_key,
+        Body=json.dumps(dagster_data, indent=4),
+        ContentType='application/json'
+    )
+    print(f"Successfully uploaded receipt to s3://{bucket_name}/{object_key}")
+
 if __name__ == "__main__":
     mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_URI"])
     mlflow.set_experiment('sk-classification')
 
-    # This evaluates to "/opt/ml/input/data/training"
-    input_data_dir = '/opt/ml/input/data/training'
+    # '/opt/ml/input/data/training'
+    input_data_dir = os.environ['SM_CHANNEL_TRAINING']
 
-    # Pandas handles reading the directory and concatenating the files natively!
     print(f"Loading all parquet files from {input_data_dir}...")
     df = pd.read_parquet(input_data_dir)
     print(df.columns)
@@ -77,17 +102,9 @@ if __name__ == "__main__":
 
 
         # Needed by dagster
-        dagster_data = {
-            'run_name': run.info.run_name,
-            'run_id': run.info.run_id,
-            'experiment_name': 'sk-classification',
-            'artifact_uri': run.info.artifact_uri
-        }
-        output_dir = os.environ.get('SM_MODEL_DIR', './')
-        with open(os.path.join(output_dir, 'dagster_data.json'), 'w') as f:
-            json.dump(dagster_data, f)
+        _write_dagster_data()
 
         # Needed for Sagemaker to write to S3
-        model_output_dir = os.environ.get('SM_MODEL_DIR', './')
+        model_output_dir = os.environ['SM_MODEL_DIR']
         joblib.dump(model, os.path.join(model_output_dir, 'model.joblib'))
         print('Model saved locally for SageMaker artifact upload.')

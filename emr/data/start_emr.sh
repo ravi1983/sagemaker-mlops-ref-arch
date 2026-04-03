@@ -10,4 +10,5 @@ docker run -it \
   public.ecr.aws/emr-serverless/spark/emr-7.6.0:latest
 
 # aws configure export-credentials --format env
-# rm -rf ~/.aws/sso/cache ~/.aws/cli/cache
+# rm -rf ~/.aws/sso/cache
+# rm -rf ~/.aws/cli/cache
