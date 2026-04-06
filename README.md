@@ -2,7 +2,7 @@
 
 This repository demonstrates an end-to-end MLOps workflow for **continuous training** and **continuous inference** on AWS.
 
-It uses **Dagster assets** for orchestration and lineage, **Dagster Pipes** for visibility into external compute, **EMR Serverless** for scalable data processing and inference, **Athena** for feature enrichment queries, **SageMaker** for training, and **AWS Managed MLflow** for experiment tracking and model registry.
+It uses **Dagster assets** for orchestration and lineage, **Dagster Pipes** for visibility into external compute, **EMR Serverless** for scalable data processing and batch inference, **Athena** for feature enrichment, **SageMaker** for model training, and **AWS Managed MLflow** for experiment tracking and model registry.
 
 ---
 
@@ -12,7 +12,7 @@ It uses **Dagster assets** for orchestration and lineage, **Dagster Pipes** for 
 ![Continuous Training](./images/CT.png)
 
 
-### Inference
+### Continuous Inference
 ![Continuous Inference](./images/Inference.png)
 
 
@@ -27,7 +27,7 @@ It uses **Dagster assets** for orchestration and lineage, **Dagster Pipes** for 
 .
 ├── code/
 │   ├── src/              # Transform, training, and inference source code
-│   └── deployment/      # Manual scripts to package and deploy code
+│   └── deployment/       # Manual scripts to package and deploy code
 ├── dags/                 # Dagster jobs and asset definitions
 ├── tofu/                 # IaC for IAM roles/policies, EMR, and MLflow infrastructure
 ├── images/               # Architecture and lineage screenshots
@@ -44,6 +44,21 @@ This project implements two core workflows:
 2. **Continuous Inference**
 
 Each step materializes metadata to make the pipeline observable, traceable, and easier to operate.
+
+---
+
+## Materialized Metadata Across the Pipeline
+
+Each stage materializes operational metadata to improve observability and traceability.
+
+Examples include:
+
+- EMR job IDs
+- Athena queries
+- S3 output paths
+- MLflow run IDs
+- artifact locations
+- registered model names and versions
 
 ---
 
@@ -70,7 +85,7 @@ A Dagster asset launches an **EMR Serverless** job using **Dagster Pipes** to:
 
 Since the offline feature store is an **append log**, the pipeline runs an **Athena query** to retrieve the latest value for each feature and writes the result to S3.
 
-This output is used as the enriched training dataset.
+This becomes the enriched training dataset.
 
 **Materialized outputs:**
 
@@ -193,28 +208,6 @@ Add an online feature store and support for real-time inference.
 
 ### 5. Event triggers
 Automatically trigger training and inference workflows when new data lands in S3.
-
----
-
-## Materialized Metadata Across the Pipeline
-
-One of the key goals of this project is to materialize useful operational metadata at each stage of the workflow.
-
-Examples include:
-
-- EMR job IDs
-- Athena queries
-- S3 output paths
-- MLflow run IDs
-- artifact locations
-- registered model names and versions
-
-This makes the pipeline easier to:
-
-- debug
-- audit
-- observe
-- explain to stakeholders
 
 ---
 
