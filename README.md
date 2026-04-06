@@ -9,20 +9,30 @@ It uses **Dagster assets** for orchestration and lineage, **Dagster Pipes** for 
 ## Architecture
 
 ### Continuous Training
-![Dagster Asset Graph](./images/CT.png)
-
-<BR>
-<BR>
+![Continuous Training](./images/CT.png)
 
 
 ### Inference
-![Dagster Asset Graph](./images/Inference.png)
+![Continuous Inference](./images/Inference.png)
 
-<BR>
-<BR>
 
-### Dagster Job
-![Dagster Asset Graph](./images/Global_Asset_Lineage.svg)
+### Global Asset Lineage
+![Global Asset Lineage](./images/Global_Asset_Lineage.svg)
+
+---
+
+## Repository Structure
+
+```text
+.
+├── code/
+│   ├── src/              # Transform, training, and inference source code
+│   └── deployment/      # Manual scripts to package and deploy code
+├── dags/                 # Dagster jobs and asset definitions
+├── tofu/                 # IaC for IAM roles/policies, EMR, and MLflow infrastructure
+├── images/               # Architecture and lineage screenshots
+└── README.md
+```
 
 ---
 
@@ -33,7 +43,7 @@ This project implements two core workflows:
 1. **Continuous Training**
 2. **Continuous Inference**
 
-Each step materializes important metadata so the pipeline is observable, traceable, and easier to operate.
+Each step materializes metadata to make the pipeline observable, traceable, and easier to operate.
 
 ---
 
@@ -41,55 +51,48 @@ Each step materializes important metadata so the pipeline is observable, traceab
 
 ### 1. Training data asset
 
-A Dagster asset represents the raw training data input.
+A Dagster asset represents the raw training data.
 
 ### 2. Feature engineering with EMR Serverless
 
-A Dagster asset kicks off an **EMR Serverless** job using **Dagster Pipes**.
+A Dagster asset launches an **EMR Serverless** job using **Dagster Pipes** to:
 
-This job:
-
-- imputes missing values
-- encodes categorical features
-- writes features to an **offline feature store** in S3
+- impute missing values
+- encode categorical features
+- write features to an **offline feature store** in S3
 
 **Materialized outputs:**
 
 - EMR job ID
 - offline feature store S3 path
 
-### 3. Build enriched training dataset with Athena
+### 3. Enriched training data with Athena
 
-Because the offline feature store is an **append log**, the pipeline creates an **Athena query** to retrieve the **latest value for each feature** and writes the result back to S3.
+Since the offline feature store is an **append log**, the pipeline runs an **Athena query** to retrieve the latest value for each feature and writes the result to S3.
 
-This becomes the enriched training dataset used by the training job.
+This output is used as the enriched training dataset.
 
 **Materialized outputs:**
 
 - Athena query
 - enriched training data S3 location
 
-### 4. Train and evaluate model with SageMaker
+### 4. Model training and evaluation with SageMaker
 
-The pipeline launches a **SageMaker training job** that trains a **classification model** using `scikit-learn` and evaluates it.
+The pipeline launches a **SageMaker training job** to train and evaluate a `scikit-learn` classification model.
 
-Training metadata is logged into **AWS Managed MLflow**, including:
-
-- experiment
-- run metadata
-- model artifacts
-- evaluation metrics
+It logs the experiment, run metadata, model artifacts, and evaluation metrics to **AWS Managed MLflow**.
 
 **Materialized outputs:**
 
 - MLflow run ID
 - MLflow artifact path
 
-### 5. Conditional model registration and promotion
+### 5. Model registration and promotion
 
 The pipeline reads model metrics from MLflow and applies a promotion rule.
 
-If the model accuracy meets the configured threshold, the pipeline:
+If accuracy meets the threshold, it:
 
 - registers the model
 - promotes it to **champion**
@@ -105,13 +108,13 @@ If the model accuracy meets the configured threshold, the pipeline:
 
 ### 1. Raw inference data asset
 
-A Dagster asset represents the raw inference input data.
+A Dagster asset represents the raw inference data.
 
-### 2. Enrich inference data with offline feature store
+### 2. Inference data enrichment
 
-The inference data is enriched by joining it with the offline feature store so that **all required features** are available before prediction.
+The pipeline joins inference data with the offline feature store to produce a feature-complete dataset for prediction.
 
-This step uses **Athena** and writes the enriched inference dataset to S3.
+This step uses **Athena** and writes the enriched dataset to S3.
 
 **Materialized outputs:**
 
@@ -120,13 +123,11 @@ This step uses **Athena** and writes the enriched inference dataset to S3.
 
 ### 3. Batch inference with EMR Serverless
 
-A Dagster asset launches an **EMR Serverless** job for inference using **Dagster Pipes**.
+A Dagster asset launches an **EMR Serverless** job using **Dagster Pipes** to:
 
-This job:
-
-- loads the promoted model from the **MLflow Model Registry**
-- uses an **MLflow UDF** for batch scoring
-- writes predictions to S3
+- load the promoted model from the **MLflow Model Registry**
+- run batch scoring with an **MLflow UDF**
+- write predictions to S3
 
 **Materialized outputs:**
 
@@ -179,24 +180,19 @@ Athena provides a simple and serverless way to do that over S3-backed data.
 To make this repository production-ready, the next improvements are:
 
 ### 1. CI/CD
-
-Add CI/CD pipelines for EMR transform/inference code, training code and dagster dags. Add robust champion/challenger model promotion & rollback.
+Add CI/CD pipelines for EMR transform and inference code, training code, and Dagster deployment code. Add stronger champion/challenger promotion and rollback support.
 
 ### 2. IAM hardening
+Lock down IAM permissions using the **principle of least privilege** across S3, Athena, EMR Serverless, SageMaker, and MLflow access.
 
-Lock down IAM permissions using the **principle of least privilege**.
+### 3. Testing strategy
+Add unit and integration tests for transformations, orchestration logic, and pipeline components.
 
-### 4. Testing strategy
+### 4. Online feature store
+Add an online feature store and support for real-time inference.
 
-Add unit/integration tests for transformations and pipeline components.
-
-### 5. Online feature store
-
-Add online feature and support for real time inference.
-
-### 6. Event triggers
-
-Automatically trigger training and inference asset creation and subsequent steps when new data arrives in s3.
+### 5. Event triggers
+Automatically trigger training and inference workflows when new data lands in S3.
 
 ---
 
