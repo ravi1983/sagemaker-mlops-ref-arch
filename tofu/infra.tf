@@ -119,6 +119,43 @@ resource "aws_sagemaker_feature_group" "offline_store" {
   }
 }
 
+resource "aws_glue_catalog_database" "inference_db" {
+  name = "inference_db"
+}
+
+resource "aws_glue_catalog_table" "customer_table" {
+  name          = "customer_table"
+  database_name = aws_glue_catalog_database.inference_db.name
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = {
+    "classification"        = "csv"
+    "skip.header.line.count" = "1"
+  }
+
+  storage_descriptor {
+    location      = "s3://${aws_s3_bucket.training-data-23421.bucket}/inference-data/"
+    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+
+    ser_de_info {
+      name                  = "csv_serde"
+      serialization_library = "org.apache.hadoop.hive.serde2.OpenCSVSerde"
+
+      parameters = {
+        "separatorChar" = ","
+        "quoteChar"     = "\""
+        "escapeChar"    = "\\"
+      }
+    }
+
+    columns {
+      name = "customer_id"
+      type = "string"
+    }
+  }
+}
+
 resource "aws_sagemaker_mlflow_tracking_server" "ds-tracking-server" {
   tracking_server_name = "ds-tracking-server"
   role_arn = aws_iam_role.sm-exec-role.arn

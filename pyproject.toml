@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3-stubs>=1.42.79",
+    "botocore[crt]>=1.42.59",
     "dagster==1.12.17",
     "dagster-aws>=0.28.17",
     "ipykernel>=7.2.0",

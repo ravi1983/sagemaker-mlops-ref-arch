@@ -18,11 +18,10 @@ athena = boto3.client('athena')
 
 @dg.asset(
     deps=[dg.AssetKey('feature_engineer_data')],
-    key_prefix=["sagemaker"],
-    compute_kind="sagemaker"
+    compute_kind="athena"
 )
-def load_training_data_to_s3(context: dg.AssetExecutionContext) -> dg.Output[str]:
-    upstream_key = dg.AssetKey("feature_engineer_data")
+def load_training_data_to_s3(context: dg.AssetExecutionContext) -> dg.Output[dict]:
+    upstream_key = dg.AssetKey(['emr', 'feature_engineer_data'])
     latest_materialization = context.instance.get_latest_materialization_event(upstream_key)
 
     metadata = latest_materialization.asset_materialization.metadata
@@ -72,17 +71,19 @@ def load_training_data_to_s3(context: dg.AssetExecutionContext) -> dg.Output[str
             time.sleep(10)
 
     return dg.Output(
-        value=train_data_loc,
+        value={
+            "train_data_loc": train_data_loc,
+            "offline_store_athena_table": os.environ["ATHENA_TABLE_NAME"],
+        },
         metadata={
-            "athena_query": dg.MetadataValue.text(query),
-            "train_data_loc": dg.MetadataValue.text(train_data_loc),
-            'exec_id': dg.MetadataValue.text(exec_id)
+            "Training Data Load Query": dg.MetadataValue.text(query),
+            "Training Data Loc": dg.MetadataValue.text(train_data_loc)
         }
     )
 
 
-@dg.asset(key_prefix=["sagemaker"], compute_kind="sagemaker")
-def create_training_job(load_training_data_to_s3: str) -> dg.Output[str]:
+@dg.asset(key_prefix=["sagemaker"], kinds={"sagemaker"})
+def create_training_job(load_training_data_to_s3: dict) -> dg.Output[str]:
     sm_bucket = 'mlflow-artifacts-98761'
     sagemaker_session = Session(default_bucket=sm_bucket)
 
@@ -113,7 +114,7 @@ def create_training_job(load_training_data_to_s3: str) -> dg.Output[str]:
         input_data_config=[
             InputData(
                 channel_name="training",
-                data_source=S3DataSource(s3_uri=load_training_data_to_s3, s3_data_type="S3Prefix")
+                data_source=S3DataSource(s3_uri=load_training_data_to_s3['train_data_loc'], s3_data_type="S3Prefix")
             )
         ]
     )
@@ -134,8 +135,9 @@ def create_training_job(load_training_data_to_s3: str) -> dg.Output[str]:
         }
     )
 
-@dg.asset
-def check_and_register_model(create_training_job: str) -> dg.Output[str]:
+
+@dg.asset(key_prefix=["sagemaker"], kinds={"sagemaker"})
+def check_and_register_model(create_training_job: str) -> dg.Output[dict]:
     # Get run information from mlflow
     mlflow.set_tracking_uri(os.environ["MLFLOW_TRACKING_ARN"])
     client = MlflowClient()
@@ -150,11 +152,21 @@ def check_and_register_model(create_training_job: str) -> dg.Output[str]:
             tags={
                 'run_id': create_training_job,
                 'experiment': 'sk-classification'
-            }
+            },
+        )
+
+        # Add champion alias
+        client.set_registered_model_alias(
+            name=registered_model.name,
+            alias='champion',
+            version=registered_model.version
         )
 
         return dg.Output(
-            value=registered_model.name,
+            value={
+                "registered_model": registered_model.name,
+                "registered_model_version": registered_model.version
+            },
             metadata={
                 "Registered Model Name": registered_model.name,
                 "Registered Model Version": registered_model.version,

@@ -25,7 +25,9 @@ resource "aws_iam_role_policy" "emr-serverless-exec-role" {
           aws_s3_bucket.training-data-23421.arn,
           "${aws_s3_bucket.training-data-23421.arn}/*",
           aws_s3_bucket.feature-store-786q23.arn,
-          "${aws_s3_bucket.feature-store-786q23.arn}/*"
+          "${aws_s3_bucket.feature-store-786q23.arn}/*",
+          aws_s3_bucket.mlflow-artifacts-98761.arn,
+          "${aws_s3_bucket.mlflow-artifacts-98761.arn}/*"
         ]
       },
       {
@@ -46,7 +48,23 @@ resource "aws_iam_role_policy" "emr-serverless-exec-role" {
         ]
         Effect   = "Allow"
         Resource = ["arn:aws:logs:*:*:*"]
-      }
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "sagemaker-mlflow:*"
+        ],
+        "Resource": aws_sagemaker_mlflow_tracking_server.ds-tracking-server.arn
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "sagemaker:GetMlflowTrackingServer",
+          "sagemaker:AccessMlflow",
+          "sagemaker:*",
+        ],
+        "Resource": "*"
+      },
     ]
   })
 }
@@ -138,7 +156,13 @@ resource "aws_iam_role_policy" "sm-exec-access" {
           "sagemaker:DeleteMlflowTrackingServer",
           "sagemaker:StartMlflowTrackingServer",
           "sagemaker:StopMlflowTrackingServer",
-          "sagemaker:CreatePresignedMlflowTrackingServerUrl"
+          "sagemaker:CreatePresignedMlflowTrackingServerUrl",
+          "sagemaker:CreateModelPackageGroup",
+          "sagemaker:CreateModelPackage",
+          "sagemaker:UpdateModelPackage",
+          "sagemaker:DescribeModelPackageGroup",
+          "sagemaker:DescribeModelPackage",
+          "sagemaker:ListModelPackage"
         ]
         Effect   = "Allow"
         Resource = "*"
@@ -164,6 +188,13 @@ resource "aws_iam_role_policy" "sm-exec-access" {
           "s3:ListBucket",
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole",
+        ]
+        Resource = aws_iam_role.sm-exec-role.arn
       }
     ]
   })

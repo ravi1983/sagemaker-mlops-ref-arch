@@ -5,7 +5,7 @@ import dagster as dg
 from dagster_aws.pipes import PipesEMRServerlessClient
 
 
-@dg.asset
+@dg.asset(kinds={"s3"})
 def training_data() -> dg.Output[str]:
     return dg.Output(
         value=os.environ['RAW_ASSET'],
@@ -15,7 +15,7 @@ def training_data() -> dg.Output[str]:
     )
 
 
-@dg.asset
+@dg.asset(key_prefix=["emr"], kinds={"spark"})
 def feature_engineer_data(context: dg.AssetExecutionContext,
                           pipes_emr_serverless_client: PipesEMRServerlessClient,
                           training_data: str):
